@@ -1,84 +1,4 @@
-// ═══ INSIGNIA SIX UPGRADE ADDON v1.0 ═══
-// Modular add-on: UI + DM + Notif + Tracking + Firebase Auth + WebRTC
-// TIDAK mengubah sistem lama - 100% safe
-
-(function() {
-  'use strict';
-
-  // ── CONFIG ──
-  const CONFIG = {
-    AGENTS: {
-      'I.S-01': { id: 'MIO', color: '#ffffff', sym: '◎' },
-      'I.S-02': { id: 'PENA', color: '#4a8edb', sym: '△' },
-      'I.S-03': { id: 'VANIA', color: '#8dcaff', sym: '◈' },
-      'I.S-04': { id: 'MIZU', color: '#acb9c9', sym: '〜' },
-      'I.S-05': { id: 'PULU', color: '#4de37d', sym: '⬡' },
-      'I.S-06': { id: 'AL', color: '#aaaaaa', sym: '□' }
-    },
-    RINGTONES: {
-      'I.S-01': 'https://github.com/miocarletta/Insignia-six-audio/raw/refs/heads/main/mio%20(3).mp3',
-      'I.S-02': 'https://github.com/miocarletta/Insignia-six-audio/raw/refs/heads/main/pena%20(1).mp3',
-      'I.S-03': 'https://github.com/miocarletta/Insignia-six-audio/raw/refs/heads/main/vania%20(1).mp3',
-      'I.S-04': 'https://github.com/miocarletta/Insignia-six-audio/raw/refs/heads/main/mizu.mp3',
-      'I.S-05': 'https://github.com/miocarletta/Insignia-six-audio/raw/refs/heads/main/pulu.mp3',
-      'I.S-06': 'https://github.com/miocarletta/Insignia-six-audio/raw/refs/heads/main/al%20(1).mp3'
-    },
-    FIREBASE_CONFIG: {
-      apiKey: "AIzaSyB0SmjlOOC2c2FWOciH5e_tOQXTdsKtT6w",
-      authDomain: "insignia-six-7aaf5.firebaseapp.com",
-      projectId: "insignia-six-7aaf5",
-      storageBucket: "insignia-six-7aaf5.firebasestorage.app",
-      messagingSenderId: "327086889647",
-      appId: "1:327086889647:web:5739001980d01a3ced925a",
-      databaseURL: "https://insignia-six-7aaf5-default-rtdb.asia-southeast1.firebasedatabase.app"
-    }
-  };
-
-  // ── STATE ──
-  let addonState = {
-    agent: null,
-    db: null,
-    audioElements: {},
-    trackingInterval: null,
-    dmListeners: {}
-  };
-
-  // ── 1. UI PATCH (CSS Injection) ──
-  function injectCSS() {
-    if (document.getElementById('addon-css')) return;
-    const style = document.createElement('style');
-    style.id = 'addon-css';
-    style.textContent = `
-      /* Perkecil Cyber Guard */
-      #cg{width:110px!important;max-height:80px!important;font-size:6px!important;padding:4px 5px!important;opacity:.75!important}
-      #cg:hover{opacity:1!important;max-height:200px!important}
-      #cgLog div{margin-bottom:0!important;line-height:1.3!important}
-      .online-bar{margin-top:3px!important;gap:2px!important}
-      .odot{width:5px!important;height:5px!important}
-
-      /* DM Panel Enhancements */
-      #addonDMPanel{position:fixed;right:120px;top:10px;width:320px;height:calc(100dvh - 20px);background:var(--card);border:1px solid var(--border);border-radius:12px;z-index:5000;display:none;backdrop-filter:blur(12px)}
-      #addonDMPanel.show{display:flex;flex-direction:column}
-      .addon-dm-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;font-family:'Syne',sans-serif;font-weight:700;font-size:14px}
-      .addon-dm-back{cursor:pointer;font-size:18px}
-      .addon-dm-msgs{flex:1;overflow-y:auto;padding:12px;max-height:calc(100% - 120px)}
-      .addon-dm-input{display:flex;gap:8px;padding:12px;border-top:1px solid var(--border);background:rgba(6,14,28,.8)}
-      .addon-dm-input input{flex:1;background:rgba(0,0,0,.45);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-family:'Share Tech Mono',monospace}
-      .addon-dm-send{width:44px;height:44px;border-radius:50%;background:var(--accent);color:var(--bg);border:none;cursor:pointer}
-
-      /* Notifications */
-      .addon-toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:rgba(8,20,40,.97);border:1px solid var(--accent);border-radius:10px;padding:12px 16px;font-family:'Share Tech Mono';font-size:11px;max-width:90vw;z-index:9999;display:none}
-      .addon-toast.show{display:block;animation:addonToastIn .3s ease}
-
-      /* Call Overlay */
-      #addonCallOverlay{position:fixed;inset:0;z-index:99999;background:rgba(1,4,10,.95);backdrop-filter:blur(20px);display:none;align-items:center;justify-content:center;flex-direction:column;gap:24px;color:var(--text)}
-      #addonCallOverlay.show{display:flex}
-      .addon-call-title{font-family:'Syne',sans-serif;font-weight:800;font-size:2.2rem;letter-spacing:4px}
-      .addon-call-agent{font-size:5rem;animation:addonRing 1.2s ease-in-out infinite}
-      @keyframes addonRing{0%,100%{transform:scale(1)rotate(0)}25%{transform:scale(1.1)rotate(10deg)}75%{transform:scale(1.1)rotate(-10deg)}}
-      .addon-call-actions{display:flex;gap:20px}
-      .addon-call-btn{padding:16px 32px;border-radius:50px;font-family:'Syne',sans-serif;font-weight:800;font-size:14px;border:none;cursor:pointer;transition:all .2s;letter-spacing:2px}
-      .addon-call-accept{background:rgba(77,227,125,.2);color:var(--safe);border:2px solid var(--safe)}
+,125,.2);color:var(--safe);border:2px solid var(--safe)}
       .addon-call-accept:hover{background:var(--safe);color:var(--bg)}
       .addon-call-decline{background:rgba(255,31,31,.2);color:var(--danger);border:2px solid var(--danger)}
       .addon-call-decline:hover{background:var(--danger);color:var(--bg)}
@@ -318,3 +238,160 @@
         addonState.agent = agentCode;
         localStorage.setItem('addon_agent', agentCode);
         document.getElementById('addonLoginOverlay').class
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>INSIGNIA SIX v9.0 UPGRADED</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#01040a;--card:rgba(10,25,45,0.5);--border:rgba(74,142,219,0.2);
+  --text:#e1e7f0;--accent:#00d4ff;--safe:#4de37d;--danger:#ff1f1f;--warn:#ffaa00;
+  --mio:#ffffff;--pena:#4a8edb;--vania:#8dcaff;--mizu:#acb9c9;--pulu:#4de37d;--al:#aaaaaa;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+html,body{height:100dvh;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);overflow:hidden;position:fixed;width:100%;-webkit-font-smoothing:antialiased;}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:linear-gradient(rgba(0,212,255,.025) 1px,transparent 1px),
+  linear-gradient(90deg,rgba(0,212,255,.025) 1px,transparent 1px);
+  background-size:28px 28px;}
+
+/* ── LOADING ── */
+#loader{position:fixed;inset:0;background:var(--bg);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;}
+.spin{width:44px;height:44px;border:3px solid rgba(0,212,255,.2);border-top:3px solid var(--accent);border-radius:50%;animation:spin 1s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.load-txt{font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:3px;animation:fade .8s ease-in-out infinite alternate;}
+@keyframes fade{from{opacity:.3;}to{opacity:1;}}
+
+/* ── CYBER GUARD ── */
+#cg{position:fixed;top:8px;right:8px;width:110px;background:rgba(0,4,2,.97);border:1px solid var(--safe);font-family:'Share Tech Mono',monospace;font-size:6px;padding:4px 5px;color:var(--safe);z-index:9000;border-radius:3px;overflow:hidden;transition:opacity .2s,max-height .2s,border-color .3s,color .3s;opacity:.75;max-height:80px;}
+#cg:hover{opacity:1;max-height:200px;}
+.cg-scan{width:100%;height:1px;background:var(--safe);opacity:.15;position:absolute;left:0;animation:scan 3s linear infinite;}
+@keyframes scan{0%{top:0;}100%{top:100%;}}
+.cg-title{border-bottom:1px solid rgba(77,227,125,.2);margin-bottom:4px;padding-bottom:3px;font-weight:bold;letter-spacing:1px;}
+#cgLog div{margin-bottom:0;line-height:1.3;}
+.danger-log{color:var(--danger)!important;font-weight:bold;}
+.online-bar{display:flex;gap:2px;flex-wrap:wrap;margin-top:3px;}
+.odot{width:5px;height:5px;border-radius:50%;opacity:.15;transition:all .4s;flex-shrink:0;}
+.odot.on{opacity:1;box-shadow:0 0 5px currentColor;}
+
+/* ── OVERLAYS ── */
+#dangerOv{position:fixed;inset:0;background:rgba(255,0,0,.07);z-index:8998;display:none;pointer-events:none;border:2px solid var(--danger);}
+#proxAlert{position:fixed;top:14px;left:50%;transform:translateX(-50%) translateY(-90px);background:var(--danger);color:#fff;padding:8px 16px;border-radius:6px;font-family:'Share Tech Mono';font-size:11px;z-index:9001;transition:transform .3s ease;white-space:nowrap;}
+#proxAlert.show{transform:translateX(-50%) translateY(0);}
+#toast{position:fixed;top:54px;left:50%;transform:translateX(-50%) translateY(-100px);background:rgba(8,20,40,.97);border:1px solid var(--accent);border-radius:10px;padding:9px 15px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--accent);z-index:8999;transition:transform .35s cubic-bezier(.34,1.56,.64,1);backdrop-filter:blur(12px);max-width:88vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#toast.show{transform:translateX(-50%) translateY(0);}
+
+/* ── SCREENS ── */
+.scr{display:none;position:fixed;inset:0;z-index:10;flex-direction:column;background:var(--bg);}
+.scr.act{display:flex;}
+.scr-center{align-items:center;justify-content:center;padding:20px;}
+
+/* ── LOGIN ── */
+.login-box{background:var(--card);padding:28px 22px;border-radius:14px;width:min(320px,92vw);text-align:center;border:2px solid var(--accent);box-shadow:0 0 40px rgba(0,212,255,.12);backdrop-filter:blur(14px);}
+.login-logo{font-family:'Syne',sans-serif;font-weight:800;font-size:1.5rem;letter-spacing:3px;margin-bottom:4px;background:linear-gradient(135deg,#00d4ff,#4de37d);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.login-sub{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--accent);letter-spacing:3px;margin-bottom:22px;opacity:.7;}
+#selAgent{width:100%;padding:12px;background:rgba(0,0,0,.45);border:1px solid var(--border);border-radius:7px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:12px;margin-bottom:10px;outline:none;-webkit-appearance:none;}
+#inCode{width:100%;padding:13px;text-align:center;background:rgba(0,0,0,.55);border:1px solid var(--border);border-radius:7px;color:var(--accent);font-family:'Share Tech Mono',monospace;font-size:1.2rem;letter-spacing:7px;outline:none;margin-bottom:12px;transition:border-color .2s;}
+#inCode:focus{border-color:rgba(0,212,255,.5);}
+.btn-login{width:100%;padding:13px;font-family:'Syne',sans-serif;font-weight:800;font-size:12px;letter-spacing:2px;border:1px solid var(--accent);background:rgba(0,212,255,.06);color:var(--accent);border-radius:7px;cursor:pointer;transition:all .2s;}
+.btn-login:active{background:rgba(0,212,255,.18);}
+#loginMsg{font-family:'Share Tech Mono',monospace;font-size:10px;min-height:16px;margin-top:8px;transition:color .2s;}
+
+/* ── MAIN LAYOUT ── */
+#scrMain{flex-direction:row;}
+
+/* SIDEBAR */
+#sidebar{width:56px;background:rgba(6,14,28,.95);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:4px;flex-shrink:0;z-index:100;}
+.sb-btn{width:42px;height:42px;border-radius:10px;border:none;background:transparent;color:var(--text);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:.4;transition:all .2s;position:relative;flex-shrink:0;}
+.sb-btn:active,.sb-btn.act{opacity:1;background:rgba(0,212,255,.1);}
+.sb-badge{position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:50%;background:var(--danger);display:none;}
+.sb-badge.show{display:block;}
+.sb-sep{width:30px;height:1px;background:var(--border);margin:4px 0;}
+.sb-bot{margin-top:auto;display:flex;flex-direction:column;align-items:center;gap:6px;}
+.my-avatar{width:32px;height:32px;border-radius:50%;border:2px solid;display:flex;align-items:center;justify-content:center;font-size:14px;transition:box-shadow .3s;}
+
+/* CONTENT AREA */
+#content{flex:1;display:flex;flex-direction:column;min-width:0;position:relative;}
+
+/* ── CHAT PANEL ── */
+.chat-panel{display:flex;flex-direction:column;height:100%;position:relative;}
+.chat-header{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0;background:rgba(6,14,28,.8);backdrop-filter:blur(8px);}
+.ch-name{font-family:'Syne',sans-serif;font-weight:700;font-size:14px;}
+.ch-status{font-family:'Share Tech Mono',monospace;font-size:9px;opacity:.5;margin-top:1px;}
+.ch-actions{margin-left:auto;display:flex;gap:6px;}
+.ch-btn{background:none;border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 10px;font-size:13px;cursor:pointer;transition:all .15s;font-family:'Share Tech Mono',monospace;font-size:9px;}
+.ch-btn:active{background:rgba(255,255,255,.08);}
+.ch-btn.calling{border-color:var(--safe);color:var(--safe);animation:callPulse 1.5s infinite;}
+@keyframes callPulse{0%,100%{box-shadow:0 0 0 0 rgba(77,227,125,.4);}50%{box-shadow:0 0 0 6px rgba(77,227,125,0);}}
+
+/* MESSAGES */
+.msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:7px;-webkit-overflow-scrolling:touch;padding-bottom:8px;}
+.msgs::-webkit-scrollbar{width:2px;}
+.msgs::-webkit-scrollbar-thumb{background:var(--border);}
+.bubble{padding:9px 13px;border-radius:4px 13px 13px 13px;font-size:13px;max-width:78%;line-height:1.55;border:1px solid rgba(255,255,255,.07);word-break:break-word;animation:bubIn .2s ease;}
+@keyframes bubIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+.mine{align-self:flex-end;border-radius:13px 4px 13px 13px;}
+.b-MIO{background:rgba(255,255,255,.05);border-color:var(--mio);}
+.b-PENA{background:rgba(74,142,219,.1);border-color:var(--pena);}
+.b-VANIA{background:rgba(141,202,255,.08);border-color:var(--vania);}
+.b-MIZU{background:rgba(172,185,201,.08);border-color:var(--mizu);}
+.b-PULU{background:rgba(77,227,125,.1);border-color:var(--pulu);}
+.b-AL{background:rgba(170,170,170,.07);border-color:var(--al);}
+.bsender{font-size:8px;font-weight:bold;opacity:.55;margin-bottom:2px;}
+.btime{font-size:8px;opacity:.3;margin-top:3px;font-family:'Share Tech Mono',monospace;}
+.mine .btime{text-align:right;}
+.sysmsg{text-align:center;font-family:'Share Tech Mono',monospace;font-size:9px;color:rgba(255,255,255,.2);padding:6px;letter-spacing:1px;align-self:center;}
+.typing-bar{height:18px;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--accent);opacity:.6;padding:2px 12px;flex-shrink:0;}
+
+/* INPUT */
+.input-wrap{display:flex;gap:8px;padding:8px 10px;border-top:1px solid var(--border);flex-shrink:0;background:rgba(6,14,28,.8);backdrop-filter:blur(8px);padding-bottom:max(8px,env(safe-area-inset-bottom));}
+.msg-in{flex:1;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:12px 13px;color:#fff;outline:none;font-family:'Share Tech Mono',monospace;font-size:13px;transition:border-color .2s;min-width:0;}
+.msg-in:focus{border-color:rgba(0,212,255,.4);}
+.send-btn{width:44px;height:44px;border-radius:50%;background:var(--accent);color:var(--bg);border:none;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 0 14px rgba(0,212,255,.35);flex-shrink:0;transition:transform .1s;}
+.send-btn:active{transform:scale(.9);}
+
+/* ── RADAR PANEL ── */
+.radar-panel{display:flex;flex-direction:column;height:100%;padding:12px;gap:10px;overflow-y:auto;}
+.radar-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;}
+.radar-ring{width:min(240px,72vw);height:min(240px,72vw);border:2px solid var(--accent);border-radius:50%;position:relative;background:radial-gradient(circle,rgba(0,212,255,.1) 0%,transparent 70%);animation:rpulse 2.5s infinite;flex-shrink:0;}
+@keyframes rpulse{0%{box-shadow:0 0 0 0 rgba(0,212,255,.4);}70%{box-shadow:0 0 0 20px rgba(0,212,255,0);}100%{box-shadow:0 0 0 0 rgba(0,212,255,0);}}
+.radar-sweep{position:absolute;top:50%;left:50%;width:50%;height:1px;background:linear-gradient(90deg,transparent,var(--accent));transform-origin:left center;animation:rsweep 3s linear infinite;}
+@keyframes rsweep{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+.rdot{position:absolute;width:10px;height:10px;border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 8px currentColor;cursor:pointer;transition:all .6s ease;}
+.rdot-label{position:absolute;font-family:'Share Tech Mono',monospace;font-size:8px;white-space:nowrap;transform:translate(-50%,8px);}
+.radar-legend{width:100%;display:flex;flex-direction:column;gap:6px;}
+.rl-item{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 10px;}
+.rl-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.rl-name{font-family:'Syne',sans-serif;font-weight:700;font-size:12px;flex:1;}
+.rl-loc{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--accent);}
+.rl-dist{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--safe);}
+.radar-hdr{font-family:'Syne',sans-serif;font-weight:800;font-size:14px;padding:0 0 4px;}
+
+/* ── CALL BUBBLE ── */
+#callBub{position:fixed;bottom:20px;right:16px;width:64px;height:64px;border-radius:50%;background:var(--safe);display:none;align-items:center;justify-content:center;font-size:20px;z-index:8000;border:3px solid rgba(255,255,255,.3);box-shadow:0 0 24px var(--safe);cursor:pointer;animation:callPulse 1.5s infinite;}
+
+/* ── AGENTS PANEL ── */
+.agents-panel{padding:12px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;}
+.agent-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;align-items:center;gap:12px;transition:border-color .2s;cursor:pointer;}
+.agent-card:active{background:rgba(0,212,255,.04);}
+.ag-sym{font-size:1.6rem;flex-shrink:0;}
+.ag-info{flex:1;min-width:0;}
+.ag-name{font-family:'Syne',sans-serif;font-weight:800;font-size:14px;}
+.ag-role{font-family:'Share Tech Mono',monospace;font-size:9px;opacity:.5;letter-spacing:1px;}
+.ag-online{width:8px;height:8px;border-radius:50%;flex-shrink:0;opacity:.25;transition:all .3s;}
+.ag-online.on{opacity:1;box-shadow:0 0 6px currentColor;}
+.ag-lastseen{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted);opacity:.4;}
+
+/* ── ADDON STYLES ── */
+#addonLoginOverlay,#addonDMPanel,#addonCallOverlay{position:fixed;z-index:10000;background:var(--bg);display:none;align-items:center;justify-content:center;flex-direction:column;color:var(--text)}
+#addonLoginOverlay.show,#addonDMPanel.show,#addonCallOverlay.show{display:flex}
+#addonDMPanel{right:120px;top:10px;width:320px;height:calc(100dvh - 20px);background:var(--card);border:1px solid var(--border);border-radius:12px;backdrop-filter:blur(12px)}
+.addon-dm-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;font-family:'Syne',sans-serif;font-weight:700;font-size:14px}
+.addon-dm-back{cursor:pointer;font-size:18px}
+.addon-dm-msgs{flex:1;overflow-y:auto;padding:12px;max-height:calc(100% - 120px)}
+.addon-dm-input{display:flex;gap:8px;padding:12px;border-top:1px solid var(--border);background:rgba(6,14,28,.8)}
+.addon-dm-input input{flex:1;background:rgba(0,0,0,.45);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-family:'Share Tech Mono',monospace}
+.addon-dm-send{width:44px;height:44px;border-radius:50%;background:var(--accent
