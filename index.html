@@ -1,0 +1,320 @@
+// ═══ INSIGNIA SIX UPGRADE ADDON v1.0 ═══
+// Modular add-on: UI + DM + Notif + Tracking + Firebase Auth + WebRTC
+// TIDAK mengubah sistem lama - 100% safe
+
+(function() {
+  'use strict';
+
+  // ── CONFIG ──
+  const CONFIG = {
+    AGENTS: {
+      'I.S-01': { id: 'MIO', color: '#ffffff', sym: '◎' },
+      'I.S-02': { id: 'PENA', color: '#4a8edb', sym: '△' },
+      'I.S-03': { id: 'VANIA', color: '#8dcaff', sym: '◈' },
+      'I.S-04': { id: 'MIZU', color: '#acb9c9', sym: '〜' },
+      'I.S-05': { id: 'PULU', color: '#4de37d', sym: '⬡' },
+      'I.S-06': { id: 'AL', color: '#aaaaaa', sym: '□' }
+    },
+    RINGTONES: {
+      'I.S-01': 'https://github.com/miocarletta/Insignia-six-audio/raw/refs/heads/main/mio%20(3).mp3',
+      'I.S-02': 'https://github.com/miocarletta/Insignia-six-audio/raw/refs/heads/main/pena%20(1).mp3',
+      'I.S-03': 'https://github.com/miocarletta/Insignia-six-audio/raw/refs/heads/main/vania%20(1).mp3',
+      'I.S-04': 'https://github.com/miocarletta/Insignia-six-audio/raw/refs/heads/main/mizu.mp3',
+      'I.S-05': 'https://github.com/miocarletta/Insignia-six-audio/raw/refs/heads/main/pulu.mp3',
+      'I.S-06': 'https://github.com/miocarletta/Insignia-six-audio/raw/refs/heads/main/al%20(1).mp3'
+    },
+    FIREBASE_CONFIG: {
+      apiKey: "AIzaSyB0SmjlOOC2c2FWOciH5e_tOQXTdsKtT6w",
+      authDomain: "insignia-six-7aaf5.firebaseapp.com",
+      projectId: "insignia-six-7aaf5",
+      storageBucket: "insignia-six-7aaf5.firebasestorage.app",
+      messagingSenderId: "327086889647",
+      appId: "1:327086889647:web:5739001980d01a3ced925a",
+      databaseURL: "https://insignia-six-7aaf5-default-rtdb.asia-southeast1.firebasedatabase.app"
+    }
+  };
+
+  // ── STATE ──
+  let addonState = {
+    agent: null,
+    db: null,
+    audioElements: {},
+    trackingInterval: null,
+    dmListeners: {}
+  };
+
+  // ── 1. UI PATCH (CSS Injection) ──
+  function injectCSS() {
+    if (document.getElementById('addon-css')) return;
+    const style = document.createElement('style');
+    style.id = 'addon-css';
+    style.textContent = `
+      /* Perkecil Cyber Guard */
+      #cg{width:110px!important;max-height:80px!important;font-size:6px!important;padding:4px 5px!important;opacity:.75!important}
+      #cg:hover{opacity:1!important;max-height:200px!important}
+      #cgLog div{margin-bottom:0!important;line-height:1.3!important}
+      .online-bar{margin-top:3px!important;gap:2px!important}
+      .odot{width:5px!important;height:5px!important}
+
+      /* DM Panel Enhancements */
+      #addonDMPanel{position:fixed;right:120px;top:10px;width:320px;height:calc(100dvh - 20px);background:var(--card);border:1px solid var(--border);border-radius:12px;z-index:5000;display:none;backdrop-filter:blur(12px)}
+      #addonDMPanel.show{display:flex;flex-direction:column}
+      .addon-dm-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;font-family:'Syne',sans-serif;font-weight:700;font-size:14px}
+      .addon-dm-back{cursor:pointer;font-size:18px}
+      .addon-dm-msgs{flex:1;overflow-y:auto;padding:12px;max-height:calc(100% - 120px)}
+      .addon-dm-input{display:flex;gap:8px;padding:12px;border-top:1px solid var(--border);background:rgba(6,14,28,.8)}
+      .addon-dm-input input{flex:1;background:rgba(0,0,0,.45);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-family:'Share Tech Mono',monospace}
+      .addon-dm-send{width:44px;height:44px;border-radius:50%;background:var(--accent);color:var(--bg);border:none;cursor:pointer}
+
+      /* Notifications */
+      .addon-toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:rgba(8,20,40,.97);border:1px solid var(--accent);border-radius:10px;padding:12px 16px;font-family:'Share Tech Mono';font-size:11px;max-width:90vw;z-index:9999;display:none}
+      .addon-toast.show{display:block;animation:addonToastIn .3s ease}
+
+      /* Call Overlay */
+      #addonCallOverlay{position:fixed;inset:0;z-index:99999;background:rgba(1,4,10,.95);backdrop-filter:blur(20px);display:none;align-items:center;justify-content:center;flex-direction:column;gap:24px;color:var(--text)}
+      #addonCallOverlay.show{display:flex}
+      .addon-call-title{font-family:'Syne',sans-serif;font-weight:800;font-size:2.2rem;letter-spacing:4px}
+      .addon-call-agent{font-size:5rem;animation:addonRing 1.2s ease-in-out infinite}
+      @keyframes addonRing{0%,100%{transform:scale(1)rotate(0)}25%{transform:scale(1.1)rotate(10deg)}75%{transform:scale(1.1)rotate(-10deg)}}
+      .addon-call-actions{display:flex;gap:20px}
+      .addon-call-btn{padding:16px 32px;border-radius:50px;font-family:'Syne',sans-serif;font-weight:800;font-size:14px;border:none;cursor:pointer;transition:all .2s;letter-spacing:2px}
+      .addon-call-accept{background:rgba(77,227,125,.2);color:var(--safe);border:2px solid var(--safe)}
+      .addon-call-accept:hover{background:var(--safe);color:var(--bg)}
+      .addon-call-decline{background:rgba(255,31,31,.2);color:var(--danger);border:2px solid var(--danger)}
+      .addon-call-decline:hover{background:var(--danger);color:var(--bg)}
+
+      /* Login Overlay */
+      #addonLoginOverlay{position:fixed;inset:0;z-index:10000;background:var(--bg);display:none;align-items:center;justify-content:center}
+      #addonLoginOverlay.show{display:flex}
+      .addon-login-box{background:var(--card);padding:32px;border-radius:16px;width:min(360px,90vw);border:2px solid var(--accent);box-shadow:0 0 50px rgba(0,212,255,.2)}
+      .addon-login-title{font-family:'Syne',sans-serif;font-weight:800;font-size:1.6rem;letter-spacing:4px;margin-bottom:8px;background:linear-gradient(135deg,var(--accent),var(--safe));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+      #addonAgentSelect,#addonAccessCode{width:100%;padding:14px;margin:12px 0;background:rgba(0,0,0,.5);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:13px}
+      #addonAccessCode{letter-spacing:6px;font-size:1.3rem;text-align:center}
+      .addon-login-btn{width:100%;padding:16px;margin-top:16px;font-family:'Syne',sans-serif;font-weight:800;font-size:14px;background:rgba(0,212,255,.1);color:var(--accent);border:2px solid var(--accent);border-radius:8px;cursor:pointer;transition:all .2s}
+      .addon-login-btn:hover{background:var(--accent);color:var(--bg)}
+      .addon-login-msg{font-size:11px;margin-top:12px;min-height:20px;font-family:'Share Tech Mono',monospace}
+    `;
+    document.head.appendChild(style);
+  }
+
+  // ── 2. FIREBASE INIT ──
+  let firebaseApp = null, firestore = null, auth = null;
+  async function initFirebase() {
+    try {
+      const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js');
+      const { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, query, orderBy, limit, where } = await import('https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js');
+      const { getAuth, signInAnonymously, onAuthStateChanged } = await import('https://www.gstatic.com/firebasejs/10.13.1/firebase-auth.js');
+
+      firebaseApp = initializeApp(CONFIG.FIREBASE_CONFIG);
+      firestore = getFirestore(firebaseApp);
+      auth = getAuth(firebaseApp);
+
+      await signInAnonymously(auth);
+      console.log('[ADDON] Firebase initialized');
+      return { firestore, auth };
+    } catch (e) {
+      console.error('[ADDON] Firebase init failed:', e);
+    }
+  }
+
+  // ── 3. SECURE LOGIN ──
+  function createSecureLogin() {
+    if (document.getElementById('addonLoginOverlay')) return;
+    
+    const overlay = document.createElement('div');
+    overlay.id = 'addonLoginOverlay';
+    overlay.className = 'show';
+    overlay.innerHTML = `
+      <div class="addon-login-box">
+        <div class="addon-login-title">🔐 SECURE AUTH</div>
+        <select id="addonAgentSelect">
+          <option value="">— SELECT AGENT —</option>
+          ${Object.entries(CONFIG.AGENTS).map(([code, data]) => 
+            `<option value="${code}">${data.sym} ${code} — ${data.id}</option>`
+          ).join('')}
+        </select>
+        <input type="password" id="addonAccessCode" placeholder="ACCESS CODE" maxlength="12">
+        <button class="addon-login-btn" onclick="window.ADDONSECURE.login()">VERIFY ACCESS</button>
+        <div class="addon-login-msg" id="addonLoginMsg"></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    document.getElementById('addonAgentSelect').addEventListener('change', () => {
+      document.getElementById('addonAccessCode').value = '';
+      document.getElementById('addonLoginMsg').textContent = '';
+    });
+
+    document.getElementById('addonAccessCode').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') window.ADDONSECURE.login();
+    });
+  }
+
+  // ── 4. PRIVATE DM SYSTEM ──
+  function createDMPanel() {
+    if (document.getElementById('addonDMPanel')) return;
+    
+    const panel = document.createElement('div');
+    panel.id = 'addonDMPanel';
+    panel.innerHTML = `
+      <div class="addon-dm-header">
+        <span class="addon-dm-back" onclick="window.ADDONDM.close()">←</span>
+        <div>
+          <div id="addonDMTitle">—</div>
+          <div id="addonDMStatus" style="font-size:11px;opacity:.6;font-family:'Share Tech Mono'">OFFLINE</div>
+        </div>
+      </div>
+      <div class="addon-dm-msgs" id="addonDMMsgs"></div>
+      <div class="addon-dm-input">
+        <input id="addonDMInput" placeholder="Private message..." maxlength="500">
+        <button class="addon-dm-send" onclick="window.ADDONDM.send()">➤</button>
+      </div>
+    `;
+    document.body.appendChild(panel);
+
+    document.getElementById('addonDMInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        window.ADDONDM.send();
+      }
+    });
+  }
+
+  // ── 5. TRACKING SYSTEM ──
+  function startTracking() {
+    if (!navigator.geolocation || !addonState.agent) return;
+    
+    navigator.geolocation.watchPosition(async (pos) => {
+      const data = {
+        agent: addonState.agent,
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        timestamp: Date.now(),
+        accuracy: pos.coords.accuracy
+      };
+      
+      if (addonState.db) {
+        try {
+          await setDoc(doc(addonState.db, 'tracking', addonState.agent), data);
+        } catch (e) {
+          console.error('[ADDON] Tracking update failed:', e);
+        }
+      }
+    }, null, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+  }
+
+  // ── 6. NOTIFICATION + RINGTONE ──
+  async function playRingtone(agentCode) {
+    const url = CONFIG.RINGTONES[agentCode];
+    if (!url || addonState.audioElements[agentCode]) return;
+
+    try {
+      const audio = new Audio(url);
+      audio.volume = 0.4;
+      audio.loop = true;
+      addonState.audioElements[agentCode] = audio;
+      await audio.play();
+    } catch (e) {
+      console.error('[ADDON] Ringtone failed:', e);
+    }
+  }
+
+  function stopRingtone(agentCode) {
+    if (addonState.audioElements[agentCode]) {
+      addonState.audioElements[agentCode].pause();
+      addonState.audioElements[agentCode].currentTime = 0;
+      delete addonState.audioElements[agentCode];
+    }
+  }
+
+  function showNotification(title, body, agentCode) {
+    if (Notification.permission === 'granted') {
+      new Notification(title, { 
+        body, 
+        icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="%2300d4ff"/></svg>',
+        badge: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="' + (CONFIG.AGENTS[agentCode]?.color || '#00d4ff') + '"/></svg>'
+      });
+    }
+    
+    playRingtone(agentCode);
+    showToast(`${CONFIG.AGENTS[agentCode]?.sym || '●'} ${title}`, CONFIG.AGENTS[agentCode]?.color);
+  }
+
+  function showToast(msg, color = 'var(--accent)') {
+    const toast = document.createElement('div');
+    toast.className = 'addon-toast show';
+    toast.style.borderColor = color;
+    toast.style.color = color;
+    toast.textContent = msg;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+      toast.remove();
+    }, 4000);
+  }
+
+  // ── 7. CALL OVERLAY ──
+  function showCallOverlay(callerCode, isVideo = false) {
+    const overlay = document.getElementById('addonCallOverlay');
+    if (!overlay) {
+      const el = document.createElement('div');
+      el.id = 'addonCallOverlay';
+      el.innerHTML = `
+        <div class="addon-call-agent" id="addonCallAgent">◎</div>
+        <div class="addon-call-title" id="addonCallTitle">INCOMING CALL</div>
+        <div id="addonCallAgentName" style="font-family:'Share Tech Mono';font-size:1.4rem;letter-spacing:3px;opacity:.8"></div>
+        <div class="addon-call-actions">
+          <button class="addon-call-btn addon-call-accept" id="addonCallAccept">✓ ACCEPT</button>
+          <button class="addon-call-btn addon-call-decline" id="addonCallDecline">✕ DECLINE</button>
+        </div>
+      `;
+      document.body.appendChild(el);
+    }
+
+    const agent = CONFIG.AGENTS[callerCode];
+    document.getElementById('addonCallAgent').textContent = agent?.sym || '●';
+    document.getElementById('addonCallAgent').style.color = agent?.color || '#fff';
+    document.getElementById('addonCallAgentName').textContent = callerCode;
+    document.getElementById('addonCallTitle').textContent = isVideo ? 'VIDEO CALL' : 'VOICE CALL';
+    
+    document.getElementById('addonCallOverlay').classList.add('show');
+    playRingtone(callerCode);
+  }
+
+  // ── 8. EXPOSED API ──
+  window.ADDONSECURE = {
+    async init() {
+      injectCSS();
+      createSecureLogin();
+      createDMPanel();
+      
+      const { firestore, auth } = await initFirebase();
+      if (firestore) addonState.db = firestore;
+      
+      // Check existing session
+      const savedAgent = localStorage.getItem('addon_agent');
+      if (savedAgent && await this.validateAgent(savedAgent)) {
+        addonState.agent = savedAgent;
+        document.getElementById('addonLoginOverlay').classList.remove('show');
+        this.startServices();
+      }
+      
+      Notification.requestPermission();
+    },
+
+    async login() {
+      const agentCode = document.getElementById('addonAgentSelect').value;
+      const accessCode = document.getElementById('addonAccessCode').value.trim();
+      const msgEl = document.getElementById('addonLoginMsg');
+
+      if (!agentCode || !accessCode) {
+        msgEl.style.color = 'var(--danger)';
+        msgEl.textContent = 'Complete all fields';
+        return;
+      }
+
+      const isValid = await this.validateAgent(agentCode, accessCode);
+      if (isValid) {
+        addonState.agent = agentCode;
+        localStorage.setItem('addon_agent', agentCode);
+        document.getElementById('addonLoginOverlay').class
